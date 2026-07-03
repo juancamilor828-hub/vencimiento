@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Vencimientos con Firebase</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen flex justify-center p-4">
+
+    <div class="w-full max-w-md bg-gray-800 rounded-2xl shadow-xl p-6 flex flex-col gap-6 relative">
+        
+        <!-- HEADER / DASHBOARD DINÁMICO -->
+        <header class="text-center relative">
+            <button onclick="toggleModal(true)" class="absolute top-0 right-0 bg-gray-700 hover:bg-gray-600 text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer font-medium transition-colors">
+                🕒 Historial
+            </button>
+
+            <h1 class="text-2xl font-bold text-indigo-400 mt-2">Mis Vencimientos</h1>
+            <p class="text-gray-400 text-sm">Base de datos en Firebase</p>
+            
+            <div class="grid grid-cols-3 gap-2 mt-4 text-center">
+                <div class="bg-gray-750 p-2 rounded-lg border border-gray-700">
+                    <span class="block text-xs text-gray-400">Gasto Mes</span>
+                    <span id="dash-gasto" class="text-base font-bold text-green-400">$0</span>
+                    <span id="dash-tendencia" class="text-[10px] block font-medium text-gray-400">Calculando...</span>
+                </div>
+                <div class="bg-gray-750 p-2 rounded-lg border border-gray-700">
+                    <span class="block text-xs text-gray-400">Urgentes</span>
+                    <span id="dash-urgentes" class="text-base font-bold text-orange-400">0</span>
+                </div>
+                <div class="bg-gray-750 p-2 rounded-lg border border-gray-700">
+                    <span class="block text-xs text-gray-400">Vencidos</span>
+                    <span id="dash-vencidos" class="text-base font-bold text-red-400">0</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- FORMULARIO RÁPIDO (SOPORTA MÚLTIPLES OBJETOS) -->
+        <section class="bg-gray-750 p-4 rounded-xl border border-gray-700">
+            <form id="form-registro" class="flex flex-col gap-3" onsubmit="agregarRegistro(event)">
+                <input id="form-nombre" type="text" placeholder="Nombres separados por comas (ej: Netflix, HBO)" required class="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-sm focus:outline-none focus:border-indigo-500">
+                <div class="grid grid-cols-2 gap-2">
+                    <input id="form-fecha" type="date" required class="bg-gray-900 border border-gray-700 rounded-lg p-2 text-sm focus:outline-none focus:border-indigo-500">
+                    <input id="form-costo" type="number" step="0.01" placeholder="Costo por objeto ($)" required class="bg-gray-900 border border-gray-700 rounded-lg p-2 text-sm focus:outline-none focus:border-indigo-500">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 font-semibold p-2 rounded-lg text-sm transition-colors cursor-pointer">+ Guardar en Firebase</button>
+            </form>
+        </section>
+
+        <!-- LISTA PRINCIPAL -->
+        <main class="flex-1 overflow-y-auto max-h-[250px] pr-1">
+            <div class="flex justify-between items-center mb-2">
+                <h2 id="titulo-lista" class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Estado de Servicios</h2>
+                <button id="btn-limpiar-filtro" onclick="limpiarFiltroCosto()" class="hidden text-xs text-indigo-400 hover:underline cursor-pointer">✨ Ver todos</button>
+            </div>
+            <div id="lista-items" class="flex flex-col gap-2">
+                <p class="text-center text-sm text-gray-500 py-4">Conectando con Firebase...</p>
+            </div>
+        </main>
+
+        <!-- TABLA COMPARATIVA DE GASTOS MES A MES -->
+        <section class="bg-gray-900/50 p-3 rounded-xl border border-gray-700">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Histórico y Variación de Costos</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                    <thead>
+                        <tr class="border-b border-gray-700 text-gray-400">
+                            <th class="pb-1 font-medium">Mes / Período</th>
+                            <th class="pb-1 text-right font-medium">Total Gastado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-historico"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <!-- VENTANA FLOTANTE (HISTORIAL DE ELIMINADOS) -->
+    <div id="modal-historial" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center p-4 z-50">
+        <div class="w-full max-w-md bg-gray-800 rounded-2xl border border-gray-700 p-6 flex flex-col gap-4 shadow-2xl">
+            <div class="flex justify-between items-center border-b border-gray-700 pb-2">
+                <h2 class="text-lg font-bold text-indigo-400 flex items-center gap-2">🕒 Historial de Eliminados</h2>
+                <button onclick="toggleModal(false)" class="text-gray-400 hover:text-white text-xl cursor-pointer font-bold">&times;</button>
+            </div>
+            <div id="lista-historial" class="overflow-y-auto max-h-[300px] flex flex-col gap-2 pr-1"></div>
+            <button onclick="toggleModal(false)" class="w-full bg-gray-700 hover:bg-gray-600 font-semibold p-2 rounded-lg text-sm transition-colors cursor-pointer mt-2">Cerrar Historial</button>
+        </div>
+    </div>
+
+    <!-- CONFIGURACIÓN Y MÓDULOS DE FIREBASE -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // Tu configuración de Firebase vinculada
+        const firebaseConfig = {
+            apiKey: "AIzaSyBDqkrs4QlZp_65Y6Ryw1QGFwp5M3ylDlI",
+            authDomain: "vencimiento-de-productos-1c32a.firebaseapp.com",
+            projectId: "vencimiento-de-productos-1c32a",
+            storageBucket: "vencimiento-de-productos-1c32a.firebasestorage.app",
+            messagingSenderId: "134483605224",
+            appId: "1:134483605224:web:a460588f90b100aa76bb5d"
+        };
+
+        // Inicializar Firebase y Firestore
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const vencimientosRef = collection(db, "vencimientos");
+
+        let todosLosDatos = [];
+        let filtroCostoActual = null;
+
+        // --- OPERACIONES DE BASE DE DATOS (EXPENDIDAS GLOBALMENTE) ---
+
+        // CREAR (Insertar uno o varios documentos)
+        window.agregarRegistro = async (e) => {
+            e.preventDefault();
+            const nombresInput = document.getElementById('form-nombre').value;
+            const fecha = document.getElementById('form-fecha').value;
+            const costo = parseFloat(document.getElementById('form-costo').value) || 0;
+
+            const listaNombres = nombresInput.split(',');
+
+            for (const nombreRaw of listaNombres) {
+                const nombreLimpio = nombreRaw.trim();
+                if (nombreLimpio.length > 0) {
+                    await addDoc(vencimientosRef, {
+                        nombre: nombreLimpio,
+                        fecha_vence: fecha,
+                        costo_mensual: costo,
+                        eliminado: 0
+                    });
+                }
+            }
+            document.getElementById('form-registro').reset();
+        };
+
+        // ACTUALIZAR: Sumar 1 mes
+        window.renovarItem = async (id, fechaActual) => {
+            const d = new Date(fechaActual + "T00:00:00");
+            d.setMonth(d.getMonth() + 1);
+            const nuevaFecha = d.toISOString().split('T')[0];
+            await updateDoc(doc(db, "vencimientos", id), { fecha_vence: nuevaFecha });
+        };
+
+        // ACTUALIZAR: Cambiar fecha manualmente
+        window.editarFecha = async (id, fechaActual) => {
+            const nuevaFecha = prompt("Nueva fecha (AAAA-MM-DD):", fechaActual);
+            if (nuevaFecha && nuevaFecha.trim().length === 10) {
+                await updateDoc(doc(db, "vencimientos", id), { fecha_vence: nuevaFecha.trim() });
+            }
+        };
+
+        // BORRADO LÓGICO: Enviar al historial
+        window.moverAlHistorial = async (id) => {
+            await updateDoc(doc(db, "vencimientos", id), { eliminado: 1 });
+        };
+
+        // RESTAURAR: Sacar del historial
+        window.restaurarItem = async (id) => {
+            await updateDoc(doc(db, "vencimientos", id), { eliminado: 0 });
+        };
+
+        // BORRAR DEFINITIVO: Eliminar documento de la nube
+        window.eliminarPermanente = async (id) => {
+            if(confirm("¿Seguro que deseas eliminarlo permanentemente de Firebase?")) {
+                await deleteDoc(doc(db, "vencimientos", id));
+            }
+        };
+
+        // FILTROS DE CLIENTE/INTERFAZ
+        window.filtrarPorCosto = (costo) => {
+            filtroCostoActual = costo;
+            document.getElementById('btn-limpiar-filtro').classList.remove('hidden');
+            document.getElementById('titulo-lista').innerText = `Costos de $${costo}`;
+            procesarYRenderizar();
+        };
+
+        window.limpiarFiltroCosto = () => {
+            filtroCostoActual = null;
+            document.getElementById('btn-limpiar-filtro').classList.add('hidden');
+            document.getElementById('titulo-lista').innerText = "Estado de Servicios";
+            procesarYRenderizar();
+        };
+
+        // --- ESCUCHAR CAMBIOS EN TIEMPO REAL (onSnapshot) ---
+        // Firebase nos avisa automáticamente cada vez que un dato cambia, se añade o se elimina
+        onSnapshot(vencimientosRef, (snapshot) => {
+            todosLosDatos = [];
+            snapshot.forEach((doc) => {
+                todosLosDatos.push({ id: doc.id, ...doc.data() });
+            });
+            procesarYRenderizar();
+        });
+
+        // --- MÓDULO ANALÍTICO Y RENDERIZADO (Reemplaza los queries de SQL) ---
+        function procesarYRenderizar() {
+            const hoy = new Date();
+            hoy.setHours(0,0,0,0);
+            const strMesActual = hoy.toISOString().substring(0, 7); // "2026-07"
+            
+            let mesAnteriorDate = new Date();
+            mesAnteriorDate.setMonth(mesAnteriorDate.getMonth() - 1);
+            const strMesAnterior = mesAnteriorDate.toISOString().substring(0, 7);
+
+            let gastoMesActual = 0;
+            let gastoMesAnterior = 0;
+            let urgentesCount = 0;
+            let vencidosCount = 0;
+
+            let historicoAgrupado = {};
+
+            const listaContenedor = document.getElementById('lista-items');
+            const historialContenedor = document.getElementById('lista-historial');
+            
+            listaContenedor.innerHTML = '';
+            historialContenedor.innerHTML = '';
+
+            // Clasificar y calcular los datos usando arrays de JS (Equivalente al motor SQL)
+            const activosFiltrados = [];
+            const eliminados = [];
+
+            todosLosDatos.forEach(item => {
+                const itemMes = item.fecha_vence.substring(0, 7);
+                const fechaVence = new Date(item.fecha_vence + "T00:00:00");
+                const difTiempo = fechaVence - hoy;
+                const diasRestantes = Math.ceil(difTiempo / (1000 * 60 * 60 * 24));
+
+                if (item.eliminado === 0) {
+                    // Acumuladores de costos por mes
+                    historicoAgrupado[itemMes] = (historicoAgrupado[itemMes] || 0) + item.costo_mensual;
+
+                    if (itemMes === strMesActual) gastoMesActual += item.costo_mensual;
+                    if (itemMes === strMesAnterior) gastoMesAnterior += item.costo_mensual;
+
+                    if (diasRestantes < 0) vencidosCount++;
+                    if (diasRestantes >= 0 && diasRestantes <= 5) urgentesCount++;
+
+                    // Aplicar el filtro de la lupa si está activo
+                    if (filtroCostoActual === null || item.costo_mensual === filtroCostoActual) {
+                        activosFiltrados.push({ ...item, dias: diasRestantes });
+                    }
+                } else {
+                    eliminados.push(item);
+                }
+            });
+
+            // Ordenar los activos por días restantes (lo más urgente primero)
+            activosFiltrados.sort((a, b) => a.dias - b.dias);
+
+            // Actualizar Dashboard
+            document.getElementById('dash-gasto').innerText = `$${gastoMesActual.toFixed(2)}`;
+            document.getElementById('dash-urgentes').innerText = urgentesCount;
+            document.getElementById('dash-vencidos').innerText = vencidosCount;
+
+            // Calcular Tendencia
+            const elTendencia = document.getElementById('dash-tendencia');
+            if (gastoMesAnterior > 0) {
+                const varPct = ((gastoMesActual - gastoMesAnterior) / gastoMesAnterior) * 100;
+                if (varPct > 0) { elTendencia.innerText = `🔺 +${varPct.toFixed(0)}% vs mes ant.`; elTendencia.className = "text-[10px] block font-medium text-red-400"; }
+                else if (varPct < 0) { elTendencia.innerText = `🔻 ${varPct.toFixed(0)}% vs mes ant.`; elTendencia.className = "text-[10px] block font-medium text-green-400"; }
+                else { elTendencia.innerText = `🔹 Estable vs mes ant.`; elTendencia.className = "text-[10px] block font-medium text-gray-400"; }
+            } else {
+                elTendencia.innerText = "✨ Datos iniciales"; elTendencia.className = "text-[10px] block font-medium text-indigo-400";
+            }
+
+            // Pintar Lista Principal
+            if (activosFiltrados.length) {
+                activosFiltrados.forEach(item => {
+                    let textoDias = item.dias < 0 ? `Venció hace ${Math.abs(item.dias)} días` : `Quedan ${item.dias} días`;
+                    if(item.dias === 0) textoDias = "¡Vence hoy!";
+
+                    listaContenedor.innerHTML += `
+                        <div class="bg-gray-900 p-2.5 rounded-lg flex justify-between items-center border-l-4 ${item.dias < 0 ? 'border-red-500' : item.dias <= 5 ? 'border-orange-500' : 'border-green-500'}">
+                            <div class="max-w-[55%] truncate">
+                                <h3 class="font-semibold text-xs flex items-center gap-1 truncate">
+                                    ${item.nombre} 
+                                    <button type="button" onclick="filtrarPorCosto(${item.costo_mensual})" class="text-[10px] text-indigo-400 hover:text-indigo-300 ml-0.5 cursor-pointer">
+                                        🔍 <span class="text-gray-400 font-normal">($${item.costo_mensual})</span>
+                                    </button>
+                                </h3>
+                                <p class="text-[11px] text-gray-400">${textoDias} • <span class="text-gray-500">${item.fecha_vence}</span></p>
+                            </div>
+                            <div class="flex gap-1">
+                                <button type="button" onclick="editarFecha('${item.id}', '${item.fecha_vence}')" class="bg-gray-800 hover:bg-gray-700 text-[11px] px-1.5 py-0.5 rounded text-yellow-400 border border-gray-700 cursor-pointer">✏️</button>
+                                <button type="button" onclick="renovarItem('${item.id}', '${item.fecha_vence}')" class="bg-gray-800 hover:bg-gray-700 text-[11px] px-1.5 py-0.5 rounded text-green-400 font-mono border border-gray-700 cursor-pointer">🔄</button>
+                                <button type="button" onclick="moverAlHistorial('${item.id}')" class="bg-gray-800 hover:bg-red-950 text-[11px] px-1.5 py-0.5 rounded text-red-400 border border-gray-700 cursor-pointer">🗑 Preservar</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            } else {
+                listaContenedor.innerHTML = '<p class="text-center text-xs text-gray-500 py-4">No hay servicios.</p>';
+            }
+
+            // Pintar Historial Flotante
+            if (eliminados.length) {
+                eliminados.forEach(item => {
+                    historialContenedor.innerHTML += `
+                        <div class="bg-gray-900 p-2 rounded-lg flex justify-between items-center border border-gray-700">
+                            <div class="truncate max-w-[180px]">
+                                <h4 class="font-medium text-xs text-gray-300 truncate">${item.nombre}</h4>
+                                <p class="text-[10px] text-gray-500">Vencía: ${item.fecha_vence}</p>
+                            </div>
+                            <div class="flex gap-1">
+                                <button type="button" onclick="restaurarItem('${item.id}')" class="bg-gray-800 hover:bg-gray-700 text-[10px] px-2 py-1 rounded text-indigo-400 border border-gray-700 cursor-pointer">🛡️</button>
+                                <button type="button" onclick="eliminarPermanente('${item.id}')" class="bg-gray-800 hover:bg-red-900 text-[10px] px-1.5 py-1 rounded text-red-500 border border-gray-700 cursor-pointer">❌</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            } else {
+                historialContenedor.innerHTML = '<p class="text-center text-xs text-gray-500 py-6">El historial está vacío.</p>';
+            }
+
+            // Pintar Tabla de Histórico Mensual
+            const tablaBody = document.getElementById('tabla-historico');
+            tablaBody.innerHTML = '';
+            const mesesOrdenados = Object.keys(historicoAgrupado).sort().reverse().slice(0, 5);
+            
+            if(mesesOrdenados.length) {
+                mesesOrdenados.forEach(mes => {
+                    tablaBody.innerHTML += `
+                        <tr class="border-b border-gray-800">
+                            <td class="py-1.5 font-mono text-gray-300">${mes}</td>
+                            <td class="py-1.5 text-right font-bold text-gray-200">$${historicoAgrupado[mes].toFixed(2)}</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                tablaBody.innerHTML = '<tr><td colspan="2" class="py-2 text-center text-gray-600">Sin datos de costos</td></tr>';
+            }
+        }
+    </script>
+
+    <script>
+        // Funciones auxiliares de la interfaz
+        function toggleModal(show) {
+            const modal = document.getElementById('modal-historial');
+            modal.className = show ? 'fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center p-4 z-50' : 'hidden';
+        }
+    </script>
+</body>
+</html>
