@@ -3,22 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control de Vencimientos con Firebase</title>
+    <title>Control de Vencimientos con Firebase Auth</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 </head>
-<body class="bg-gray-900 text-gray-100 min-h-screen flex justify-center p-4">
+<body class="bg-gray-900 text-gray-100 min-h-screen flex items-center justify-center p-4">
 
-    <div class="w-full max-w-md bg-gray-800 rounded-2xl shadow-xl p-6 flex flex-col gap-6 relative">
+    <!-- PANTALLA DE LOGUEO (Se muestra por defecto si no estás autenticado) -->
+    <div id="pantalla-login" class="w-full max-w-md bg-gray-800 rounded-2xl shadow-xl p-8 flex flex-col items-center gap-6 border border-gray-700">
+        <div class="text-center">
+            <div class="text-4xl mb-2">🔐</div>
+            <h1 class="text-2xl font-bold text-indigo-400">Mis Vencimientos</h1>
+            <p class="text-gray-400 text-sm mt-1">Organiza tus servicios en la nube</p>
+        </div>
+        
+        <p class="text-gray-400 text-xs text-center px-4">
+            Para proteger tus datos y asegurar que solo tú puedas verlos, inicia sesión de forma segura con tu cuenta de Google.
+        </p>
+
+        <button onclick="loginConGoogle()" class="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-gray-900 font-semibold py-3 px-4 rounded-xl shadow-md transition-all cursor-pointer text-sm">
+            <!-- Icono G de Google en SVG -->
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+                <path fill="#EA4335" d="M12 5.04c1.62 0 3.08.56 4.22 1.65l3.15-3.15C17.45 1.68 14.93 1 12 1 7.35 1 3.39 3.65 1.42 7.5l3.79 2.94C6.1 7.17 8.84 5.04 12 5.04z"/>
+                <path fill="#4285F4" d="M23.49 12.27c0-.81-.07-1.59-.2-2.34H12v4.44h6.44c-.28 1.47-1.11 2.71-2.36 3.55l3.66 2.84c2.14-1.98 3.39-4.88 3.39-8.49z"/>
+                <path fill="#FBBC05" d="M5.21 14.56c-.24-.72-.38-1.49-.38-2.28s.14-1.56.38-2.28L1.42 7.06C.51 8.88 0 10.9 0 13s.51 4.12 1.42 5.94l3.79-2.94z"/>
+                <path fill="#34A853" d="M12 23c3.24 0 5.97-1.08 7.96-2.92l-3.66-2.84c-1.01.68-2.31 1.08-4.3 1.08-3.16 0-5.9-2.13-6.79-5.4l-3.79 2.94C3.39 20.35 7.35 23 12 23z"/>
+            </svg>
+            Continuar con Google
+        </button>
+    </div>
+
+    <!-- PANTALLA PRINCIPAL DE LA APLICACIÓN (Oculta por defecto) -->
+    <div id="pantalla-app" class="hidden w-full max-w-md bg-gray-800 rounded-2xl shadow-xl p-6 flex flex-col gap-6 relative">
         
         <!-- HEADER / DASHBOARD DINÁMICO -->
-        <header class="text-center relative">
+        <header class="text-center relative pt-4">
+            <!-- Botón de Cerrar Sesión -->
+            <button onclick="cerrarSesion()" class="absolute top-0 left-0 text-gray-500 hover:text-red-400 text-xs py-1 transition-colors cursor-pointer">
+                🚪 Salir
+            </button>
+
             <button onclick="toggleModal(true)" class="absolute top-0 right-0 bg-gray-700 hover:bg-gray-600 text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer font-medium transition-colors">
                 🕒 Historial
             </button>
 
-            <h1 class="text-2xl font-bold text-indigo-400 mt-2">Mis Vencimientos</h1>
-            <p class="text-gray-400 text-sm">Base de datos en Firebase</p>
+            <!-- Info del Usuario -->
+            <div class="flex items-center justify-center gap-2 mt-2">
+                <img id="user-avatar" src="" alt="Avatar" class="w-6 h-6 rounded-full border border-indigo-500 hidden">
+                <h1 class="text-2xl font-bold text-indigo-400">Mis Vencimientos</h1>
+            </div>
+            <p id="user-saludo" class="text-gray-400 text-xs mt-1">Conectado correctamente</p>
             
             <div class="grid grid-cols-3 gap-2 mt-4 text-center">
                 <div class="bg-gray-750 p-2 rounded-lg border border-gray-700">
@@ -37,7 +71,7 @@
             </div>
         </header>
 
-        <!-- FORMULARIO RÁPIDO (SOPORTA MÚLTIPLES OBJETOS) -->
+        <!-- FORMULARIO RÁPIDO -->
         <section class="bg-gray-750 p-4 rounded-xl border border-gray-700">
             <form id="form-registro" class="flex flex-col gap-3" onsubmit="agregarRegistro(event)">
                 <input id="form-nombre" type="text" placeholder="Nombres separados por comas (ej: Netflix, HBO)" required class="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-sm focus:outline-none focus:border-indigo-500">
@@ -56,7 +90,7 @@
                 <button id="btn-limpiar-filtro" onclick="limpiarFiltroCosto()" class="hidden text-xs text-indigo-400 hover:underline cursor-pointer">✨ Ver todos</button>
             </div>
             <div id="lista-items" class="flex flex-col gap-2">
-                <p class="text-center text-sm text-gray-500 py-4">Conectando con Firebase...</p>
+                <p class="text-center text-xs text-gray-500 py-4">Buscando tus datos...</p>
             </div>
         </main>
 
@@ -89,12 +123,13 @@
         </div>
     </div>
 
-    <!-- CONFIGURACIÓN Y MÓDULOS DE FIREBASE -->
+    <!-- CONFIGURACIÓN DE FIREBASE (AUTH & FIRESTORE) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, updateDoc, deleteDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-        // Tu configuración de Firebase vinculada
+        // Tu configuración vinculada
         const firebaseConfig = {
             apiKey: "AIzaSyBDqkrs4QlZp_65Y6Ryw1QGFwp5M3ylDlI",
             authDomain: "vencimiento-de-productos-1c32a.firebaseapp.com",
@@ -104,19 +139,81 @@
             appId: "1:134483605224:web:a460588f90b100aa76bb5d"
         };
 
-        // Inicializar Firebase y Firestore
+        // Inicializar Firebase
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
         const vencimientosRef = collection(db, "vencimientos");
 
         let todosLosDatos = [];
         let filtroCostoActual = null;
+        let usuarioActual = null;
+        let desuscribirRealtime = null; // Guardar la escucha activa para apagarla al salir
 
-        // --- OPERACIONES DE BASE DE DATOS (EXPENDIDAS GLOBALMENTE) ---
+        // --- MANEJO DE AUTENTICACIÓN ---
 
-        // CREAR (Insertar uno o varios documentos)
+        // Iniciar Sesión con Google
+        window.loginConGoogle = async () => {
+            try {
+                await signInWithPopup(auth, provider);
+            } catch (error) {
+                console.error("Error al autenticar con Google:", error);
+                alert("No se pudo iniciar sesión. Verifica la consola.");
+            }
+        };
+
+        // Cerrar Sesión
+        window.cerrarSesion = async () => {
+            if(desuscribirRealtime) desuscribirRealtime(); // Detener escucha de Firestore
+            await signOut(auth);
+        };
+
+        // Observador del Estado de la Sesión
+        onAuthStateChanged(auth, (user) => {
+            const loginPantalla = document.getElementById('pantalla-login');
+            const appPantalla = document.getElementById('pantalla-app');
+
+            if (user) {
+                // Usuario conectado
+                usuarioActual = user;
+                loginPantalla.classList.add('hidden');
+                appPantalla.classList.remove('hidden');
+
+                // Renderizar perfil básico en la barra superior
+                const avatar = document.getElementById('user-avatar');
+                if(user.photoURL) {
+                    avatar.src = user.photoURL;
+                    avatar.classList.remove('hidden');
+                }
+                document.getElementById('user-saludo').innerText = `Hola, ${user.displayName || 'Usuario'}`;
+
+                // Activar escucha en tiempo real de Firestore FILTRADA por el UID del usuario
+                const consultaFiltroUser = query(vencimientosRef, where("userId", "==", user.uid));
+                
+                desuscribirRealtime = onSnapshot(consultaFiltroUser, (snapshot) => {
+                    todosLosDatos = [];
+                    snapshot.forEach((doc) => {
+                        todosLosDatos.push({ id: doc.id, ...doc.data() });
+                    });
+                    procesarYRenderizar();
+                });
+
+            } else {
+                // Usuario desconectado
+                usuarioActual = null;
+                loginPantalla.classList.remove('hidden');
+                appPantalla.classList.add('hidden');
+                todosLosDatos = [];
+            }
+        });
+
+        // --- OPERACIONES CRUD DE LA BASE DE DATOS (PROTEGIDAS) ---
+
         window.agregarRegistro = async (e) => {
             e.preventDefault();
+            if (!usuarioActual) return;
+
             const nombresInput = document.getElementById('form-nombre').value;
             const fecha = document.getElementById('form-fecha').value;
             const costo = parseFloat(document.getElementById('form-costo').value) || 0;
@@ -130,14 +227,14 @@
                         nombre: nombreLimpio,
                         fecha_vence: fecha,
                         costo_mensual: costo,
-                        eliminado: 0
+                        eliminado: 0,
+                        userId: usuarioActual.uid // Vinculamos el registro al usuario
                     });
                 }
             }
             document.getElementById('form-registro').reset();
         };
 
-        // ACTUALIZAR: Sumar 1 mes
         window.renovarItem = async (id, fechaActual) => {
             const d = new Date(fechaActual + "T00:00:00");
             d.setMonth(d.getMonth() + 1);
@@ -145,7 +242,6 @@
             await updateDoc(doc(db, "vencimientos", id), { fecha_vence: nuevaFecha });
         };
 
-        // ACTUALIZAR: Cambiar fecha manualmente
         window.editarFecha = async (id, fechaActual) => {
             const nuevaFecha = prompt("Nueva fecha (AAAA-MM-DD):", fechaActual);
             if (nuevaFecha && nuevaFecha.trim().length === 10) {
@@ -153,24 +249,21 @@
             }
         };
 
-        // BORRADO LÓGICO: Enviar al historial
         window.moverAlHistorial = async (id) => {
             await updateDoc(doc(db, "vencimientos", id), { eliminado: 1 });
         };
 
-        // RESTAURAR: Sacar del historial
         window.restaurarItem = async (id) => {
             await updateDoc(doc(db, "vencimientos", id), { eliminado: 0 });
         };
 
-        // BORRAR DEFINITIVO: Eliminar documento de la nube
         window.eliminarPermanente = async (id) => {
-            if(confirm("¿Seguro que deseas eliminarlo permanentemente de Firebase?")) {
+            if(confirm("¿Deseas eliminar este registro de forma definitiva de tu cuenta?")) {
                 await deleteDoc(doc(db, "vencimientos", id));
             }
         };
 
-        // FILTROS DE CLIENTE/INTERFAZ
+        // --- FILTROS DE INTERFAZ ---
         window.filtrarPorCosto = (costo) => {
             filtroCostoActual = costo;
             document.getElementById('btn-limpiar-filtro').classList.remove('hidden');
@@ -185,21 +278,11 @@
             procesarYRenderizar();
         };
 
-        // --- ESCUCHAR CAMBIOS EN TIEMPO REAL (onSnapshot) ---
-        // Firebase nos avisa automáticamente cada vez que un dato cambia, se añade o se elimina
-        onSnapshot(vencimientosRef, (snapshot) => {
-            todosLosDatos = [];
-            snapshot.forEach((doc) => {
-                todosLosDatos.push({ id: doc.id, ...doc.data() });
-            });
-            procesarYRenderizar();
-        });
-
-        // --- MÓDULO ANALÍTICO Y RENDERIZADO (Reemplaza los queries de SQL) ---
+        // --- CÓMPUTO ANALÍTICO Y REDERIZADO EN CLIENTE ---
         function procesarYRenderizar() {
             const hoy = new Date();
             hoy.setHours(0,0,0,0);
-            const strMesActual = hoy.toISOString().substring(0, 7); // "2026-07"
+            const strMesActual = hoy.toISOString().substring(0, 7);
             
             let mesAnteriorDate = new Date();
             mesAnteriorDate.setMonth(mesAnteriorDate.getMonth() - 1);
@@ -218,7 +301,6 @@
             listaContenedor.innerHTML = '';
             historialContenedor.innerHTML = '';
 
-            // Clasificar y calcular los datos usando arrays de JS (Equivalente al motor SQL)
             const activosFiltrados = [];
             const eliminados = [];
 
@@ -229,7 +311,6 @@
                 const diasRestantes = Math.ceil(difTiempo / (1000 * 60 * 60 * 24));
 
                 if (item.eliminado === 0) {
-                    // Acumuladores de costos por mes
                     historicoAgrupado[itemMes] = (historicoAgrupado[itemMes] || 0) + item.costo_mensual;
 
                     if (itemMes === strMesActual) gastoMesActual += item.costo_mensual;
@@ -238,7 +319,6 @@
                     if (diasRestantes < 0) vencidosCount++;
                     if (diasRestantes >= 0 && diasRestantes <= 5) urgentesCount++;
 
-                    // Aplicar el filtro de la lupa si está activo
                     if (filtroCostoActual === null || item.costo_mensual === filtroCostoActual) {
                         activosFiltrados.push({ ...item, dias: diasRestantes });
                     }
@@ -247,15 +327,13 @@
                 }
             });
 
-            // Ordenar los activos por días restantes (lo más urgente primero)
             activosFiltrados.sort((a, b) => a.dias - b.dias);
 
-            // Actualizar Dashboard
+            // Pintar Dashboard
             document.getElementById('dash-gasto').innerText = `$${gastoMesActual.toFixed(2)}`;
             document.getElementById('dash-urgentes').innerText = urgentesCount;
             document.getElementById('dash-vencidos').innerText = vencidosCount;
 
-            // Calcular Tendencia
             const elTendencia = document.getElementById('dash-tendencia');
             if (gastoMesAnterior > 0) {
                 const varPct = ((gastoMesActual - gastoMesAnterior) / gastoMesAnterior) * 100;
@@ -266,7 +344,7 @@
                 elTendencia.innerText = "✨ Datos iniciales"; elTendencia.className = "text-[10px] block font-medium text-indigo-400";
             }
 
-            // Pintar Lista Principal
+            // Pintar Lista
             if (activosFiltrados.length) {
                 activosFiltrados.forEach(item => {
                     let textoDias = item.dias < 0 ? `Venció hace ${Math.abs(item.dias)} días` : `Quedan ${item.dias} días`;
@@ -278,7 +356,7 @@
                                 <h3 class="font-semibold text-xs flex items-center gap-1 truncate">
                                     ${item.nombre} 
                                     <button type="button" onclick="filtrarPorCosto(${item.costo_mensual})" class="text-[10px] text-indigo-400 hover:text-indigo-300 ml-0.5 cursor-pointer">
-                                        🔍 <span class="text-gray-400 font-normal">($${item.costo_mensual})</span>
+                                        🔍 <span class="text-gray-400 font-normal font-sans">($${item.costo_mensual})</span>
                                     </button>
                                 </h3>
                                 <p class="text-[11px] text-gray-400">${textoDias} • <span class="text-gray-500">${item.fecha_vence}</span></p>
@@ -286,16 +364,16 @@
                             <div class="flex gap-1">
                                 <button type="button" onclick="editarFecha('${item.id}', '${item.fecha_vence}')" class="bg-gray-800 hover:bg-gray-700 text-[11px] px-1.5 py-0.5 rounded text-yellow-400 border border-gray-700 cursor-pointer">✏️</button>
                                 <button type="button" onclick="renovarItem('${item.id}', '${item.fecha_vence}')" class="bg-gray-800 hover:bg-gray-700 text-[11px] px-1.5 py-0.5 rounded text-green-400 font-mono border border-gray-700 cursor-pointer">🔄</button>
-                                <button type="button" onclick="moverAlHistorial('${item.id}')" class="bg-gray-800 hover:bg-red-950 text-[11px] px-1.5 py-0.5 rounded text-red-400 border border-gray-700 cursor-pointer">🗑 Preservar</button>
+                                <button type="button" onclick="moverAlHistorial('${item.id}')" class="bg-gray-800 hover:bg-red-950 text-[11px] px-1.5 py-0.5 rounded text-red-400 border border-gray-700 cursor-pointer">🗑️</button>
                             </div>
                         </div>
                     `;
                 });
             } else {
-                listaContenedor.innerHTML = '<p class="text-center text-xs text-gray-500 py-4">No hay servicios.</p>';
+                listaContenedor.innerHTML = '<p class="text-center text-xs text-gray-500 py-4">No tienes servicios agregados.</p>';
             }
 
-            // Pintar Historial Flotante
+            // Pintar Historial
             if (eliminados.length) {
                 eliminados.forEach(item => {
                     historialContenedor.innerHTML += `
@@ -315,7 +393,7 @@
                 historialContenedor.innerHTML = '<p class="text-center text-xs text-gray-500 py-6">El historial está vacío.</p>';
             }
 
-            // Pintar Tabla de Histórico Mensual
+            // Pintar Tabla de Histórico
             const tablaBody = document.getElementById('tabla-historico');
             tablaBody.innerHTML = '';
             const mesesOrdenados = Object.keys(historicoAgrupado).sort().reverse().slice(0, 5);
@@ -336,7 +414,7 @@
     </script>
 
     <script>
-        // Funciones auxiliares de la interfaz
+        // Utilidades de interfaz básica
         function toggleModal(show) {
             const modal = document.getElementById('modal-historial');
             modal.className = show ? 'fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center p-4 z-50' : 'hidden';
